@@ -10,9 +10,12 @@ a full note-taking product.
 
 ## Screenshots
 
-| Notes list | Note editor |
-|---|---|
-| ![Notes list](docs/screenshots/01-notes-list.png) | ![Note editor](docs/screenshots/02-note-editor.png) |
+All captured at a 390×844 phone viewport. Regenerate them with
+`node scripts/capture-screenshots.js` (requires the dev server on port 8081).
+
+| Notes list | Note editor | Dark mode |
+|---|---|---|
+| ![Notes list](docs/screenshots/01-notes-list.png) | ![Note editor](docs/screenshots/02-note-editor.png) | ![Dark mode](docs/screenshots/05-dark-mode.png) |
 
 | Empty state | Not found |
 |---|---|
