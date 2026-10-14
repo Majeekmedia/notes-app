@@ -78,8 +78,9 @@ export function normalizeTag(raw: string): string {
 /**
  * Parses free text into a clean, de-duplicated tag list.
  *
- * Accepts comma- or newline-separated input (plus `#` prefixes) so tags can be
- * typed naturally, then enforces the per-note cap.
+ * Used by `normalizeNote` to repair tag data read from storage, and by the
+ * comma-separated input path. Accepts comma- or newline-separated input (plus
+ * `#` prefixes) so tags can be typed naturally, then enforces the per-note cap.
  */
 export function parseTags(raw: string): string[] {
   const parts = raw
@@ -88,11 +89,6 @@ export function parseTags(raw: string): string[] {
     .filter((tag) => tag.length > 0);
 
   return [...new Set(parts)].slice(0, MAX_TAGS_PER_NOTE);
-}
-
-/** Renders a tag list back into an editable string. */
-export function formatTags(tags: readonly string[]): string {
-  return tags.join(', ');
 }
 
 /**

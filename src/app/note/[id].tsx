@@ -12,12 +12,12 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { TagChip } from '@/components/tag-chip';
+import { TagEditor } from '@/components/tag-editor';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useNotes } from '@/hooks/use-notes';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
-import { formatTags, parseTags, type Note } from '@/types/note';
+import type { Note } from '@/types/note';
 
 /** Debounce before writing to storage, so typing does not thrash AsyncStorage. */
 const SAVE_DELAY_MS = 400;
@@ -62,23 +62,19 @@ export default function NoteEditorRoute() {
 
 function NoteEditor({ note }: { note: Note }) {
   const theme = useTheme();
-  const { updateNote, deleteNote, togglePin } = useNotes();
+  const { notes, updateNote, deleteNote, togglePin } = useNotes();
 
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(note.body);
-  /** Tags are held as raw text while editing so partial words are not parsed away. */
-  const [tagsText, setTagsText] = useState(formatTags(note.tags));
+  /** Tags are a real list now, committed explicitly rather than parsed per keystroke. */
+  const [tags, setTags] = useState<string[]>(note.tags);
   const [pinned, setPinned] = useState(note.pinned);
 
   /**
    * Latest draft, kept in a ref so the debounced save and the unmount flush
    * always read current values instead of a stale closure.
    */
-  const draft = useRef({
-    title,
-    body,
-    tags: parseTags(tagsText),
-  });
+  const draft = useRef({ title, body, tags });
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flush = useCallback(() => {
@@ -87,7 +83,7 @@ function NoteEditor({ note }: { note: Note }) {
 
   // Autosave, debounced while the user types.
   useEffect(() => {
-    draft.current = { title, body, tags: parseTags(tagsText) };
+    draft.current = { title, body, tags };
 
     if (saveTimer.current !== null) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(flush, SAVE_DELAY_MS);
@@ -95,7 +91,7 @@ function NoteEditor({ note }: { note: Note }) {
     return () => {
       if (saveTimer.current !== null) clearTimeout(saveTimer.current);
     };
-  }, [title, body, tagsText, flush]);
+  }, [title, body, tags, flush]);
 
   // Flush any pending edit when the screen unmounts.
   useEffect(() => flush, [flush]);
@@ -123,7 +119,6 @@ function NoteEditor({ note }: { note: Note }) {
   }, [note.id, togglePin]);
 
   const displayTitle = title.trim().length > 0 ? title.trim() : 'Note';
-  const parsedTags = parseTags(tagsText);
 
   return (
     <KeyboardAvoidingView
@@ -183,36 +178,7 @@ function NoteEditor({ note }: { note: Note }) {
             scrollEnabled={false}
           />
 
-          <View style={styles.tagSection}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Tags
-            </ThemedText>
-            <TextInput
-              value={tagsText}
-              onChangeText={setTagsText}
-              placeholder="work, ideas, urgent"
-              placeholderTextColor={theme.textSecondary}
-              style={[
-                styles.tagInput,
-                { color: theme.text, backgroundColor: theme.backgroundElement },
-              ]}
-              autoCapitalize="none"
-              autoCorrect={false}
-              accessibilityLabel="Tags, separated by commas"
-            />
-
-            {parsedTags.length > 0 ? (
-              <View style={styles.tagPreview}>
-                {parsedTags.map((tag) => (
-                  <TagChip key={tag} label={tag} />
-                ))}
-              </View>
-            ) : (
-              <ThemedText type="small" themeColor="textSecondary">
-                Separate tags with commas.
-              </ThemedText>
-            )}
-          </View>
+          <TagEditor tags={tags} allNotes={notes} onChange={setTags} />
         </View>
       </ScrollView>
 
@@ -265,17 +231,6 @@ const styles = StyleSheet.create({
   tagSection: {
     gap: Spacing.two,
     paddingTop: Spacing.two,
-  },
-  tagInput: {
-    fontSize: 16,
-    borderRadius: 12,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + 2,
-  },
-  tagPreview: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
   },
   footer: {
     paddingHorizontal: Spacing.four,

@@ -89,3 +89,36 @@ export function collectTagCounts(notes: readonly Note[]): { tag: string; count: 
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
+
+/** All distinct tags in use, alphabetically. */
+export function allTags(notes: readonly Note[]): string[] {
+  const tags = new Set<string>();
+  for (const note of notes) {
+    for (const tag of note.tags) tags.add(tag);
+  }
+  return [...tags].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Suggestions for a partially typed tag.
+ *
+ * Matches anywhere in the tag (not just the start) so "sh" finds both `shopping`
+ * and `fresh`. Already-selected tags and the exact current input are excluded,
+ * so the list only ever offers something new. Most-used tags come first.
+ */
+export function suggestTags(
+  notes: readonly Note[],
+  input: string,
+  exclude: readonly string[] = [],
+  limit = 6,
+): string[] {
+  const term = input.trim().toLowerCase();
+  const taken = new Set(exclude);
+
+  return collectTagCounts(notes)
+    .map((entry) => entry.tag)
+    .filter((tag) => !taken.has(tag))
+    .filter((tag) => (term.length === 0 ? true : tag.includes(term)))
+    .filter((tag) => tag !== term)
+    .slice(0, limit);
+}

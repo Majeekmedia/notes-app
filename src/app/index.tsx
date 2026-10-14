@@ -1,6 +1,14 @@
 import { router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NoteActionsSheet } from '@/components/note-actions-sheet';
@@ -13,7 +21,7 @@ import { useNotes } from '@/hooks/use-notes';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
 import { collectTagCounts, queryNotes, type SortOrder } from '@/lib/notes-query';
-import { noteDisplayTitle, type Note } from '@/types/note';
+import { noteDisplayTitle, normalizeTag, type Note } from '@/types/note';
 
 const SORT_OPTIONS: { key: SortOrder; label: string }[] = [
   { key: 'updated', label: 'Edited' },
@@ -24,13 +32,27 @@ const SORT_OPTIONS: { key: SortOrder; label: string }[] = [
 export default function NotesListScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { notes, isLoaded, createNote, deleteNote, togglePin } = useNotes();
+  const {
+    notes,
+    isLoaded,
+    createNote,
+    deleteNote,
+    togglePin,
+    deleteNotes,
+    setPinnedFor,
+    addTagTo,
+  } = useNotes();
 
   const [search, setSearch] = useState('');
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [sort, setSort] = useState<SortOrder>('updated');
   /** Note whose long-press action menu is open, if any. */
   const [actionsNote, setActionsNote] = useState<Note | null>(null);
+
+  /** Bulk selection mode. `null` means off; a Set means on with that selection. */
+  const [selected, setSelected] = useState<Set<string> | null>(null);
+  /** Tag being applied to the current selection. */
+  const [bulkTag, setBulkTag] = useState('');
 
   const visibleNotes = useMemo(
     () => queryNotes(notes, { search, tag: activeTag, sort }),
@@ -47,6 +69,32 @@ export default function NotesListScreen() {
     () => (actionsNote ? (notes.find((note) => note.id === actionsNote.id) ?? null) : null),
     [actionsNote, notes],
   );
+
+  const isSelecting = selected !== null;
+  const selectedIds = useMemo(() => (selected ? [...selected] : []), [selected]);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelected((current) => {
+      const next = new Set(current ?? []);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  /** Enters selection mode with one note already ticked. */
+  const startSelecting = useCallback((id: string) => {
+    setSelected(new Set([id]));
+  }, []);
+
+  const exitSelection = useCallback(() => {
+    setSelected(null);
+    setBulkTag('');
+  }, []);
+
+  const selectAllVisible = useCallback(() => {
+    setSelected(new Set(visibleNotes.map((note) => note.id)));
+  }, [visibleNotes]);
 
   const tagCounts = useMemo(() => collectTagCounts(notes), [notes]);
 
@@ -81,13 +129,102 @@ export default function NotesListScreen() {
     setActiveTag(null);
   }, []);
 
+  const handleBulkDelete = useCallback(async () => {
+    const count = selectedIds.length;
+    if (count === 0) return;
+
+    const confirmed = await confirmDestructive(
+      `Delete ${count} ${count === 1 ? 'note' : 'notes'}?`,
+      `They will be permanently removed from this device.`,
+    );
+    if (!confirmed) return;
+
+    deleteNotes(selectedIds);
+    exitSelection();
+  }, [selectedIds, deleteNotes, exitSelection]);
+
+  const handleBulkPin = useCallback(
+    (pinned: boolean) => {
+      setPinnedFor(selectedIds, pinned);
+      exitSelection();
+    },
+    [selectedIds, setPinnedFor, exitSelection],
+  );
+
+  const handleBulkAddTag = useCallback(() => {
+    const tag = normalizeTag(bulkTag);
+    if (tag.length === 0) return;
+
+    addTagTo(selectedIds, tag);
+    exitSelection();
+  }, [bulkTag, selectedIds, addTagTo, exitSelection]);
+
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.three }]}>
-        <ThemedText type="subtitle">Majeek Notes</ThemedText>
+        <View style={styles.titleRow}>
+          {isSelecting ? (
+            <ThemedText type="subtitle">
+              {selected.size} selected
+            </ThemedText>
+          ) : (
+            <ThemedText type="subtitle">Majeek Notes</ThemedText>
+          )}
+
+          <View style={styles.headerActions}>
+            {isSelecting ? (
+              <>
+                <Pressable
+                  onPress={selectAllVisible}
+                  accessibilityRole="button"
+                  accessibilityLabel="Select all visible notes"
+                  hitSlop={Spacing.two}>
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.headerAction}>
+                    All
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={exitSelection}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel selection"
+                  hitSlop={Spacing.two}>
+                  <ThemedText type="small" style={styles.headerAction}>
+                    Cancel
+                  </ThemedText>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  onPress={() => router.push('/tags')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Manage tags"
+                  hitSlop={Spacing.two}>
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.headerAction}>
+                    Tags
+                  </ThemedText>
+                </Pressable>
+                {notes.length > 0 ? (
+                  <Pressable
+                    onPress={() => setSelected(new Set())}
+                    accessibilityRole="button"
+                    accessibilityLabel="Select notes"
+                    hitSlop={Spacing.two}>
+                    <ThemedText type="small" themeColor="textSecondary" style={styles.headerAction}>
+                      Select
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </>
+            )}
+          </View>
+        </View>
+
         {isLoaded && notes.length > 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
-            {describeCount(visibleNotes.length, notes.length, isFiltering)}
+            {isSelecting
+              ? 'Tap notes to select · long press to open actions'
+              : describeCount(visibleNotes.length, notes.length, isFiltering)}
           </ThemedText>
         ) : null}
       </View>
@@ -137,9 +274,11 @@ export default function NotesListScreen() {
           </View>
 
           {/* The long-press menu is the only way to reach pin in a list, so say so. */}
-          <ThemedText type="small" themeColor="textSecondary">
-            Tap ☆ to pin · long press a note for more options
-          </ThemedText>
+          {!isSelecting ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Tap ☆ to pin · long press a note for more options
+            </ThemedText>
+          ) : null}
         </View>
       ) : null}
 
@@ -162,9 +301,19 @@ export default function NotesListScreen() {
             <NoteRow
               note={item}
               highlighted={search.trim().length > 0}
-              onPress={() => router.push({ pathname: '/note/[id]', params: { id: item.id } })}
-              onLongPress={() => setActionsNote(item)}
+              selecting={isSelecting}
+              selected={selected?.has(item.id) ?? false}
+              onPress={() => {
+                if (isSelecting) toggleSelected(item.id);
+                else router.push({ pathname: '/note/[id]', params: { id: item.id } });
+              }}
+              onLongPress={() => {
+                // While selecting, long press just toggles instead of opening the menu.
+                if (isSelecting) toggleSelected(item.id);
+                else setActionsNote(item);
+              }}
               onTogglePin={() => togglePin(item.id)}
+              onSelectToggle={() => startSelecting(item.id)}
             />
           )}
         />
@@ -183,20 +332,108 @@ export default function NotesListScreen() {
         }}
       />
 
-      <Pressable
-        onPress={handleCreate}
-        accessibilityRole="button"
-        accessibilityLabel="Create a new note"
-        style={({ pressed }) => [
-          styles.fab,
-          {
-            backgroundColor: theme.text,
-            bottom: insets.bottom + Spacing.four,
-            opacity: pressed ? 0.8 : 1,
-          },
-        ]}>
-        <ThemedText style={[styles.fabGlyph, { color: theme.background }]}>＋</ThemedText>
-      </Pressable>
+      {/* Bulk action bar replaces the FAB while selecting, so the two never overlap. */}
+      {isSelecting ? (
+        <View
+          style={[
+            styles.bulkBar,
+            {
+              backgroundColor: theme.backgroundElement,
+              paddingBottom: insets.bottom + Spacing.two,
+            },
+          ]}>
+          <View style={styles.bulkRow}>
+            <Pressable
+              onPress={() => handleBulkPin(true)}
+              disabled={selected.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Pin selected notes"
+              style={({ pressed }) => [
+                styles.bulkButton,
+                { backgroundColor: theme.background, opacity: selected.size === 0 ? 0.4 : pressed ? 0.7 : 1 },
+              ]}>
+              <ThemedText type="small" style={styles.bulkLabel}>
+                ★ Pin
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              onPress={() => handleBulkPin(false)}
+              disabled={selected.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Unpin selected notes"
+              style={({ pressed }) => [
+                styles.bulkButton,
+                { backgroundColor: theme.background, opacity: selected.size === 0 ? 0.4 : pressed ? 0.7 : 1 },
+              ]}>
+              <ThemedText type="small" style={styles.bulkLabel}>
+                ☆ Unpin
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              onPress={() => void handleBulkDelete()}
+              disabled={selected.size === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Delete selected notes"
+              style={({ pressed }) => [
+                styles.bulkButton,
+                { backgroundColor: theme.background, opacity: selected.size === 0 ? 0.4 : pressed ? 0.7 : 1 },
+              ]}>
+              <ThemedText type="small" style={[styles.bulkLabel, styles.destructive]}>
+                Delete
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          <View style={styles.bulkRow}>
+            <TextInput
+              value={bulkTag}
+              onChangeText={setBulkTag}
+              onSubmitEditing={handleBulkAddTag}
+              placeholder="Add a tag to selection"
+              placeholderTextColor={theme.textSecondary}
+              editable={selected.size > 0}
+              style={[styles.bulkInput, { color: theme.text, backgroundColor: theme.background }]}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="done"
+              accessibilityLabel="Tag to add to selected notes"
+            />
+            <Pressable
+              onPress={handleBulkAddTag}
+              disabled={selected.size === 0 || bulkTag.trim().length === 0}
+              accessibilityRole="button"
+              accessibilityLabel="Apply tag to selected notes"
+              style={({ pressed }) => [
+                styles.bulkButton,
+                {
+                  backgroundColor: theme.text,
+                  opacity: selected.size === 0 || bulkTag.trim().length === 0 ? 0.4 : pressed ? 0.7 : 1,
+                },
+              ]}>
+              <ThemedText type="small" style={[styles.bulkLabel, { color: theme.background }]}>
+                Apply
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <Pressable
+          onPress={handleCreate}
+          accessibilityRole="button"
+          accessibilityLabel="Create a new note"
+          style={({ pressed }) => [
+            styles.fab,
+            {
+              backgroundColor: theme.text,
+              bottom: insets.bottom + Spacing.four,
+              opacity: pressed ? 0.8 : 1,
+            },
+          ]}>
+          <ThemedText style={[styles.fabGlyph, { color: theme.background }]}>＋</ThemedText>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -246,6 +483,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingBottom: Spacing.three,
     gap: Spacing.half,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  headerAction: {
+    fontWeight: '600',
+  },
+  bulkBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.three,
+  },
+  bulkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  bulkButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    paddingVertical: Spacing.two + 2,
+    paddingHorizontal: Spacing.two,
+  },
+  bulkLabel: {
+    fontWeight: '600',
+  },
+  bulkInput: {
+    flex: 2,
+    fontSize: 15,
+    borderRadius: 10,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two + 2,
+  },
+  destructive: {
+    color: '#E5484D',
   },
   controls: {
     width: '100%',

@@ -19,7 +19,7 @@ import {
 
 import { loadNotes, saveNotes } from '@/lib/storage';
 import { sortNotes } from '@/lib/notes-query';
-import { createEmptyNote, type Note } from '@/types/note';
+import { MAX_TAGS_PER_NOTE, createEmptyNote, normalizeTag, type Note } from '@/types/note';
 
 /** The fields the editor is allowed to change. */
 export type NotePatch = Pick<Note, 'title' | 'body' | 'tags'>;
@@ -36,6 +36,18 @@ type NotesContextValue = {
   deleteNote: (id: string) => void;
   /** Flips a note's pinned state. Pinned notes sort above the rest. */
   togglePin: (id: string) => void;
+  /** Deletes several notes at once, for bulk selection. */
+  deleteNotes: (ids: readonly string[]) => void;
+  /** Sets the pinned state for several notes at once. */
+  setPinnedFor: (ids: readonly string[], pinned: boolean) => void;
+  /** Adds a tag to several notes at once, skipping notes that already have it. */
+  addTagTo: (ids: readonly string[], tag: string) => void;
+  /** Removes a tag from several notes at once. */
+  removeTagFrom: (ids: readonly string[], tag: string) => void;
+  /** Renames a tag across every note that uses it. */
+  renameTag: (from: string, to: string) => void;
+  /** Removes a tag from every note that uses it. */
+  deleteTag: (tag: string) => void;
 };
 
 const NotesContext = createContext<NotesContextValue | null>(null);
@@ -115,6 +127,113 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     [replaceAll],
   );
 
+  /** Deletes several notes in one write, so storage is touched once. */
+  const deleteNotes = useCallback(
+    (ids: readonly string[]) => {
+      const doomed = new Set(ids);
+      replaceAll(notesRef.current.filter((note) => !doomed.has(note.id)));
+    },
+    [replaceAll],
+  );
+
+  /**
+   * Bulk pin/unpin.
+   *
+   * Like `togglePin`, this deliberately does not touch `updatedAt`, and notes
+   * whose state already matches are left untouched so no needless write happens.
+   */
+  const setPinnedFor = useCallback(
+    (ids: readonly string[], pinned: boolean) => {
+      const targets = new Set(ids);
+      replaceAll(
+        notesRef.current.map((note) =>
+          targets.has(note.id) && note.pinned !== pinned ? { ...note, pinned } : note,
+        ),
+      );
+    },
+    [replaceAll],
+  );
+
+  /** Adds a tag to several notes, skipping any that already carry it. */
+  const addTagTo = useCallback(
+    (ids: readonly string[], rawTag: string) => {
+      const tag = normalizeTag(rawTag);
+      if (tag.length === 0) return;
+
+      const targets = new Set(ids);
+      const now = Date.now();
+
+      replaceAll(
+        notesRef.current.map((note) => {
+          if (!targets.has(note.id) || note.tags.includes(tag)) return note;
+          return {
+            ...note,
+            tags: [...note.tags, tag].slice(0, MAX_TAGS_PER_NOTE),
+            updatedAt: now,
+          };
+        }),
+      );
+    },
+    [replaceAll],
+  );
+
+  /** Removes a tag from several notes. */
+  const removeTagFrom = useCallback(
+    (ids: readonly string[], tag: string) => {
+      const targets = new Set(ids);
+      const now = Date.now();
+
+      replaceAll(
+        notesRef.current.map((note) => {
+          if (!targets.has(note.id) || !note.tags.includes(tag)) return note;
+          return { ...note, tags: note.tags.filter((t) => t !== tag), updatedAt: now };
+        }),
+      );
+    },
+    [replaceAll],
+  );
+
+  /**
+   * Renames a tag everywhere it appears.
+   *
+   * If the target name already exists on a note, the tags are merged rather than
+   * duplicated, so a rename can never produce two identical tags on one note.
+   */
+  const renameTag = useCallback(
+    (from: string, rawTo: string) => {
+      const to = normalizeTag(rawTo);
+      if (to.length === 0 || to === from) return;
+
+      const now = Date.now();
+
+      replaceAll(
+        notesRef.current.map((note) => {
+          if (!note.tags.includes(from)) return note;
+
+          const merged = [...new Set(note.tags.map((t) => (t === from ? to : t)))];
+          return { ...note, tags: merged, updatedAt: now };
+        }),
+      );
+    },
+    [replaceAll],
+  );
+
+  /** Removes a tag from every note that uses it. */
+  const deleteTag = useCallback(
+    (tag: string) => {
+      const now = Date.now();
+
+      replaceAll(
+        notesRef.current.map((note) =>
+          note.tags.includes(tag)
+            ? { ...note, tags: note.tags.filter((t) => t !== tag), updatedAt: now }
+            : note,
+        ),
+      );
+    },
+    [replaceAll],
+  );
+
   const getNote = useCallback(
     (id: string) => notes.find((note) => note.id === id),
     [notes],
@@ -132,8 +251,28 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       updateNote,
       deleteNote,
       togglePin,
+      deleteNotes,
+      setPinnedFor,
+      addTagTo,
+      removeTagFrom,
+      renameTag,
+      deleteTag,
     }),
-    [orderedNotes, isLoaded, getNote, createNote, updateNote, deleteNote, togglePin],
+    [
+      orderedNotes,
+      isLoaded,
+      getNote,
+      createNote,
+      updateNote,
+      deleteNote,
+      togglePin,
+      deleteNotes,
+      setPinnedFor,
+      addTagTo,
+      removeTagFrom,
+      renameTag,
+      deleteTag,
+    ],
   );
 
   return <NotesContext.Provider value={value}>{children}</NotesContext.Provider>;

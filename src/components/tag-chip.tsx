@@ -11,6 +11,12 @@ type TagChipProps = {
   selected?: boolean;
   /** Trailing count, shown in the filter bar. */
   count?: number;
+  /**
+   * Overrides the default spoken label. Needed because the same chip is used for
+   * filtering the list and for adding a tag in the editor, and "Filter by x" is
+   * wrong for the latter.
+   */
+  accessibilityLabel?: string;
 };
 
 /**
@@ -19,7 +25,13 @@ type TagChipProps = {
  * Renders as a plain `View` when no `onPress` is given, so tags shown for
  * information on a note row are not announced as buttons by screen readers.
  */
-export function TagChip({ label, onPress, selected = false, count }: TagChipProps) {
+export function TagChip({
+  label,
+  onPress,
+  selected = false,
+  count,
+  accessibilityLabel,
+}: TagChipProps) {
   const theme = useTheme();
 
   const content = (
@@ -45,7 +57,10 @@ export function TagChip({ label, onPress, selected = false, count }: TagChipProp
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={selected ? `Remove ${label} filter` : `Filter by ${label}`}
+      accessibilityLabel={
+        accessibilityLabel ??
+        (selected ? `Remove ${label} filter` : `Filter by ${label}`)
+      }
       style={({ pressed }) => [
         styles.chip,
         {

@@ -49,6 +49,7 @@ export default function RootLayout() {
             {/* The list renders its own title, so it needs no header. */}
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="note/[id]" />
+            <Stack.Screen name="tags" options={{ title: 'Manage tags' }} />
           </Stack>
         </NotesProvider>
         <StatusBar style={isDark ? 'light' : 'dark'} />
