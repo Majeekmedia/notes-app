@@ -1,98 +1,147 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, router } from 'expo-router';
+import { useCallback } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
+import { NoteRow } from '@/components/note-row';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { useNotes } from '@/hooks/use-notes';
+import { useTheme } from '@/hooks/use-theme';
+import { confirmDestructive } from '@/lib/confirm';
+import type { Note } from '@/types/note';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+export default function NotesListScreen() {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const { notes, isLoaded, createNote, deleteNote } = useNotes();
+
+  /** New notes are created first, then immediately opened for editing. */
+  const handleCreate = useCallback(() => {
+    const note = createNote();
+    router.push({ pathname: '/note/[id]', params: { id: note.id } });
+  }, [createNote]);
+
+  const handleDelete = useCallback(
+    async (note: Note) => {
+      const confirmed = await confirmDestructive(
+        'Delete note?',
+        'This note will be permanently removed from this device.',
+      );
+      if (confirmed) deleteNote(note.id);
+    },
+    [deleteNote],
+  );
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.three }]}>
+        <ThemedText type="subtitle">Notes</ThemedText>
+        {isLoaded && notes.length > 0 ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {notes.length} {notes.length === 1 ? 'note' : 'notes'}
+          </ThemedText>
+        ) : null}
+      </View>
+
+      {!isLoaded ? (
+        <View style={styles.centered}>
+          <ActivityIndicator />
+        </View>
+      ) : notes.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <FlatList
+          data={notes}
+          keyExtractor={(note) => note.id}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={({ item }) => (
+            <NoteRow
+              note={item}
+              onPress={() => router.push({ pathname: '/note/[id]', params: { id: item.id } })}
+              onDelete={() => void handleDelete(item)}
+            />
+          )}
+        />
+      )}
+
+      <Pressable
+        onPress={handleCreate}
+        accessibilityRole="button"
+        accessibilityLabel="Create a new note"
+        style={({ pressed }) => [
+          styles.fab,
+          {
+            backgroundColor: theme.text,
+            bottom: insets.bottom + Spacing.four,
+            opacity: pressed ? 0.8 : 1,
+          },
+        ]}>
+        <ThemedText style={[styles.fabGlyph, { color: theme.background }]}>＋</ThemedText>
+      </Pressable>
+    </View>
   );
 }
 
-export default function HomeScreen() {
+function EmptyState() {
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+    <View style={styles.centered}>
+      <ThemedText type="subtitle" style={styles.centeredText}>
+        No notes yet
+      </ThemedText>
+      <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+        Tap the ＋ button to write your first note.
+      </ThemedText>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+  header: {
+    width: '100%',
     maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.four,
+    paddingBottom: Spacing.three,
+    gap: Spacing.half,
   },
-  heroSection: {
+  centered: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    paddingHorizontal: Spacing.five,
+    gap: Spacing.two,
   },
-  title: {
+  centeredText: {
     textAlign: 'center',
   },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
+  listContent: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    paddingTop: Spacing.two,
+    paddingBottom: 140,
+  },
+  separator: {
+    height: Spacing.two,
+  },
+  fab: {
+    position: 'absolute',
+    right: Spacing.four,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabGlyph: {
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '600',
   },
 });
