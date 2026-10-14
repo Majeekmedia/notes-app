@@ -28,25 +28,27 @@
 src/
 ├── app/                        # every file here is a route
 │   ├── _layout.tsx             # SafeAreaProvider → ThemeProvider → NotesProvider → Stack
-│   ├── index.tsx               # list: search, tag filter, sort, FAB, actions sheet
-│   └── note/[id].tsx           # editor: title, body, tags, pin, delete
+│   ├── index.tsx               # list: search, tag filter, sort, bulk select, FAB, actions sheet
+│   ├── tags.tsx                # tag management: rename / delete a tag everywhere
+│   └── note/[id].tsx           # editor: title, body, TagEditor, pin, delete
 ├── components/
-│   ├── note-row.tsx            # row + sibling pin rail (NOT nested)
+│   ├── note-row.tsx            # row + sibling rail (pin button OR selection checkbox)
 │   ├── note-actions-sheet.tsx  # long-press Modal: pin + delete + cancel
+│   ├── tag-editor.tsx          # chip editor with autocomplete
 │   ├── search-bar.tsx
-│   ├── tag-chip.tsx
+│   ├── tag-chip.tsx            # label overridable (filter vs add)
 │   ├── themed-text.tsx         # from the Expo template — keep
 │   └── themed-view.tsx         # from the Expo template — keep
 ├── constants/
 │   ├── theme.ts                # colour palette, spacing, fonts
 │   └── navigation-theme.ts     # nav theme mapped onto our palette (prevents flashing)
 ├── hooks/
-│   ├── use-notes.tsx           # single source of truth + all mutations
+│   ├── use-notes.tsx           # single source of truth + all mutations (incl. bulk)
 │   ├── use-theme.ts
 │   └── use-color-scheme.ts
 ├── lib/
 │   ├── storage.ts              # AsyncStorage read/write + one-time shape upgrade
-│   ├── notes-query.ts          # search / tag filter / sort (pure functions)
+│   ├── notes-query.ts          # search / tag filter / sort / tag suggestions (pure)
 │   ├── format.ts               # relative dates
 │   └── confirm.ts              # Alert (native) / window.confirm (web)
 └── types/
@@ -119,10 +121,10 @@ Claims in `PROGRESS.md` were backed by:
 
 ## Known limitations
 
-- Tags are free-text with no autocomplete, so typos create separate tags
-- No tag renaming or deletion from one place
-- No rich text formatting
 - Search is a plain substring match — no fuzzy matching or ranking
+- Bulk actions pin/tag/delete only; they cannot merge notes
+- Tags have no colours or ordering
+- No rich text formatting
 - Storage is unencrypted (SecureStore would be needed for secrets)
 - No cross-device sync (that starts at App #4, Majeek Habits, with Supabase)
 

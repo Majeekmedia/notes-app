@@ -60,7 +60,9 @@ See [`docs/CONVENTIONS.md`](../../docs/CONVENTIONS.md) §2 for the full storage 
 
 - **Create, edit, and delete notes** — full CRUD
 - **Search** across titles, bodies **and tags**
-- **Tags** — comma-separated, normalised to lowercase, with a tap-to-filter chip row
+- **Tags** with a chip editor and **autocomplete** — suggestions match anywhere in a tag
+- **Tag management** — rename or delete a tag across every note that uses it
+- **Bulk selection** — multi-pin, multi-tag, and multi-delete, with select-all
 - **Pinning** — pinned notes stay above everything, in any sort order
 - **Sorting** — by last edited, date created, or title
 - **Two-screen flow** (list → editor) using Expo Router's file-based navigation
@@ -191,17 +193,17 @@ npx expo-doctor     # diagnose dependency/config issues
 
 ## Known limitations
 
-- Tags are free-text with no autocomplete, so typos create separate tags
-- No tag renaming or deletion from a single place
-- No rich text formatting
 - Search is a simple substring match — no fuzzy matching or ranking
+- Bulk actions cannot merge notes, only pin/tag/delete them
+- Tags have no colours or ordering, and are listed alphabetically
+- No rich text formatting
 - Storage is unencrypted (fine for non-sensitive notes; SecureStore would be needed otherwise)
 - No sync across devices
 
 ## Possible next steps
 
-- Tag autocomplete and a tag-management screen
-- Bulk selection for multi-delete or multi-tag
+- Merge or duplicate notes
+- Coloured tags
 - Move to `expo-sqlite` if the note count grows large
 - Optional Supabase sync for multi-device support
 
