@@ -16,7 +16,13 @@ export default function NotesListScreen() {
   const insets = useSafeAreaInsets();
   const { notes, isLoaded, createNote, deleteNote } = useNotes();
 
-  /** New notes are created first, then immediately opened for editing. */
+  /**
+   * Creates a note, then opens it.
+   *
+   * Both the state update and the navigation happen in the same event handler,
+   * so React batches them into a single render — the list never paints an
+   * intermediate "note added" frame before the editor starts sliding in.
+   */
   const handleCreate = useCallback(() => {
     const note = createNote();
     router.push({ pathname: '/note/[id]', params: { id: note.id } });
