@@ -6,9 +6,17 @@ Built as **portfolio app #1** in a deliberate progression from simple to complex
 app is to demonstrate navigation, forms, list rendering, and local persistence — not to compete with
 a full note-taking product.
 
-<p align="center">
-  <em>Screenshots coming once captured on a physical device.</em>
-</p>
+---
+
+## Screenshots
+
+| Notes list | Note editor |
+|---|---|
+| ![Notes list](docs/screenshots/01-notes-list.png) | ![Note editor](docs/screenshots/02-note-editor.png) |
+
+| Empty state | Not found |
+|---|---|
+| ![Empty state](docs/screenshots/03-empty-state.png) | ![Note not found](docs/screenshots/04-note-not-found.png) |
 
 ---
 
