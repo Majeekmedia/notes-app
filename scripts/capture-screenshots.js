@@ -43,6 +43,8 @@ function seedNotes() {
       id: 'seed-1',
       title: 'Grocery list',
       body: 'Milk, eggs, bread, tomatoes, rice, cooking oil',
+      tags: ['shopping', 'home'],
+      pinned: true,
       createdAt: now - hour,
       updatedAt: now - 1_500_000,
     },
@@ -50,6 +52,8 @@ function seedNotes() {
       id: 'seed-2',
       title: 'App ideas',
       body: 'Habit tracker with streaks. Recipe planner with photo upload. Offline-first field app with sync.',
+      tags: ['ideas', 'work'],
+      pinned: false,
       createdAt: now - 2 * day,
       updatedAt: now - 2 * day,
     },
@@ -57,8 +61,19 @@ function seedNotes() {
       id: 'seed-3',
       title: 'Meeting notes',
       body: 'Client wants a booking app with push notifications. Follow up Friday.',
+      tags: ['work', 'urgent'],
+      pinned: false,
       createdAt: now - 4 * day,
       updatedAt: now - 3 * day,
+    },
+    {
+      id: 'seed-4',
+      title: 'Weekend plans',
+      body: 'Call mum, fix the bike, finish the React Native course',
+      tags: ['home', 'personal'],
+      pinned: false,
+      createdAt: now - 6 * day,
+      updatedAt: now - 5 * day,
     },
   ];
 }
@@ -175,7 +190,7 @@ async function main() {
   }
 
   try {
-    // 1. Notes list
+    // 1. Notes list — search bar, tag filters, sort, pinned note at the top
     await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.evaluate((notes) => {
       localStorage.setItem('notes-app/notes/v1', JSON.stringify(notes));
@@ -184,21 +199,51 @@ async function main() {
     await waitForApp('Grocery list');
     await capture('01-notes-list.png');
 
-    // 2. Note editor
-    await page.goto(`${BASE}/note/seed-1`, { waitUntil: 'domcontentloaded' });
-    await waitForApp('Saved automatically');
-    await capture('02-note-editor.png');
+    // 2. Search + tag filter in use, to show the query features working
+    await page.getByLabel('Search notes').fill('work');
+    await page.waitForTimeout(900);
+    await capture('02-search-and-filter.png');
+    await page.getByLabel('Clear search').click();
+    await page.waitForTimeout(700);
 
-    // 3. Empty state
+    // 3. Long-press actions menu (pin + delete)
+    const rowBox = await page.evaluate(() => {
+      const row = document.querySelector('[aria-label^="Open note:"]');
+      if (!row) return null;
+      const rect = row.getBoundingClientRect();
+      return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
+    });
+    if (!rowBox) throw new Error('could not find a note row to long-press');
+
+    await page.mouse.move(rowBox.x, rowBox.y);
+    await page.mouse.down();
+    await page.waitForTimeout(900);
+    await page.mouse.up();
+    await page.waitForFunction(() => (document.body.innerText || '').includes('Delete note'), null, {
+      timeout: 20_000,
+    });
+    await page.waitForTimeout(900);
+    await capture('03-actions-menu.png');
+
+    // Dismiss the menu
+    await page.getByLabel('Cancel').click();
+    await page.waitForTimeout(800);
+
+    // 4. Note editor — title, body and the tag field
+    await page.goto(`${BASE}/note/seed-2`, { waitUntil: 'domcontentloaded' });
+    await waitForApp('Saved automatically');
+    await capture('04-note-editor.png');
+
+    // 5. Empty state
     await page.evaluate(() => localStorage.setItem('notes-app/notes/v1', '[]'));
     await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await waitForApp('No notes yet');
-    await capture('03-empty-state.png');
+    await capture('05-empty-state.png');
 
-    // 4. Note not found
+    // 6. Note not found
     await page.goto(`${BASE}/note/does-not-exist`, { waitUntil: 'domcontentloaded' });
     await waitForApp('Note not found');
-    await capture('04-note-not-found.png');
+    await capture('06-note-not-found.png');
 
     // 5. Dark mode list (also the full-bleed verification artefact)
     console.log('\nCapturing dark mode:');
@@ -225,19 +270,19 @@ async function main() {
     if (darkSize.w !== WIDTH || darkSize.h !== HEIGHT || darkSize.rootW !== WIDTH) {
       throw new Error(`Dark layout mismatch: ${JSON.stringify(darkSize)}`);
     }
-    await darkPage.screenshot({ path: path.join(OUT, '05-dark-mode.png') });
-    console.log(`  captured 05-dark-mode.png (${darkSize.w}x${darkSize.h} @${SCALE}x)`);
+    await darkPage.screenshot({ path: path.join(OUT, '07-dark-mode.png') });
+    console.log(`  captured 07-dark-mode.png (${darkSize.w}x${darkSize.h} @${SCALE}x)`);
 
     console.log('\nVerifying full-bleed (no letterbox margin) using the dark capture:');
     const { width, leftLuma, rightLuma } = await verifyFullBleed(
       browser,
-      path.join(OUT, '05-dark-mode.png'),
+      path.join(OUT, '07-dark-mode.png'),
     );
 
     // App is near-black in dark mode; a margin would be the white default.
     const ok = leftLuma < 60 && rightLuma < 60;
     console.log(
-      `  ${ok ? 'OK  ' : 'FAIL'} 05-dark-mode.png (${width}px) -> edge luma: ` +
+      `  ${ok ? 'OK  ' : 'FAIL'} 07-dark-mode.png (${width}px) -> edge luma: ` +
         `left ${leftLuma}, right ${rightLuma} (must be dark if full-bleed)`,
     );
     if (!ok) throw new Error('Detected a blank side margin in the capture');
@@ -245,7 +290,8 @@ async function main() {
     console.log('\nAll screenshots captured, size-verified and checked for margins.');
   } finally {
     await browser.close();
-  }}
+  }
+}
 
 main().catch((error) => {
   console.error('Screenshot capture failed:', error.message);

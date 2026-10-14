@@ -18,10 +18,11 @@ import {
 } from 'react';
 
 import { loadNotes, saveNotes } from '@/lib/storage';
+import { sortNotes } from '@/lib/notes-query';
 import { createEmptyNote, type Note } from '@/types/note';
 
-/** The only fields the editor is allowed to change. */
-export type NotePatch = Pick<Note, 'title' | 'body'>;
+/** The fields the editor is allowed to change. */
+export type NotePatch = Pick<Note, 'title' | 'body' | 'tags'>;
 
 type NotesContextValue = {
   /** Newest edit first. */
@@ -33,6 +34,8 @@ type NotesContextValue = {
   createNote: () => Note;
   updateNote: (id: string, patch: NotePatch) => void;
   deleteNote: (id: string) => void;
+  /** Flips a note's pinned state. Pinned notes sort above the rest. */
+  togglePin: (id: string) => void;
 };
 
 const NotesContext = createContext<NotesContextValue | null>(null);
@@ -95,19 +98,42 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     [replaceAll],
   );
 
+  /**
+   * Flips the pinned flag.
+   *
+   * `updatedAt` is deliberately left alone: pinning is not an edit, and touching
+   * it would make a pinned note claim it was "just edited" and reorder the list.
+   */
+  const togglePin = useCallback(
+    (id: string) => {
+      replaceAll(
+        notesRef.current.map((note) =>
+          note.id === id ? { ...note, pinned: !note.pinned } : note,
+        ),
+      );
+    },
+    [replaceAll],
+  );
+
   const getNote = useCallback(
     (id: string) => notes.find((note) => note.id === id),
     [notes],
   );
 
-  const sortedNotes = useMemo(
-    () => [...notes].sort((a, b) => b.updatedAt - a.updatedAt),
-    [notes],
-  );
+  // Default ordering, so callers that do not query still get sensible order.
+  const orderedNotes = useMemo(() => sortNotes(notes, 'updated'), [notes]);
 
   const value = useMemo<NotesContextValue>(
-    () => ({ notes: sortedNotes, isLoaded, getNote, createNote, updateNote, deleteNote }),
-    [sortedNotes, isLoaded, getNote, createNote, updateNote, deleteNote],
+    () => ({
+      notes: orderedNotes,
+      isLoaded,
+      getNote,
+      createNote,
+      updateNote,
+      deleteNote,
+      togglePin,
+    }),
+    [orderedNotes, isLoaded, getNote, createNote, updateNote, deleteNote, togglePin],
   );
 
   return <NotesContext.Provider value={value}>{children}</NotesContext.Provider>;

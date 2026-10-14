@@ -13,13 +13,17 @@ a full note-taking product.
 All captured at a 390×844 phone viewport. Regenerate them with
 `node scripts/capture-screenshots.js` (requires the dev server on port 8081).
 
-| Notes list | Note editor | Dark mode |
+| Notes list | Search & tag filter | Long-press actions |
 |---|---|---|
-| ![Notes list](docs/screenshots/01-notes-list.png) | ![Note editor](docs/screenshots/02-note-editor.png) | ![Dark mode](docs/screenshots/05-dark-mode.png) |
+| ![Notes list](docs/screenshots/01-notes-list.png) | ![Search and filter](docs/screenshots/02-search-and-filter.png) | ![Actions menu](docs/screenshots/03-actions-menu.png) |
+
+| Note editor | Dark mode |
+|---|---|
+| ![Note editor](docs/screenshots/04-note-editor.png) | ![Dark mode](docs/screenshots/07-dark-mode.png) |
 
 | Empty state | Not found |
 |---|---|
-| ![Empty state](docs/screenshots/03-empty-state.png) | ![Note not found](docs/screenshots/04-note-not-found.png) |
+| ![Empty state](docs/screenshots/05-empty-state.png) | ![Note not found](docs/screenshots/06-note-not-found.png) |
 
 ---
 
@@ -55,13 +59,18 @@ See [`docs/CONVENTIONS.md`](../../docs/CONVENTIONS.md) §2 for the full storage 
 ## Features
 
 - **Create, edit, and delete notes** — full CRUD
+- **Search** across titles, bodies **and tags**
+- **Tags** — comma-separated, normalised to lowercase, with a tap-to-filter chip row
+- **Pinning** — pinned notes stay above everything, in any sort order
+- **Sorting** — by last edited, date created, or title
 - **Two-screen flow** (list → editor) using Expo Router's file-based navigation
+- **Long-press menu** with pin and delete actions
 - **Autosave** — debounced writes (400 ms) plus a flush on screen exit, so nothing is lost
 - **Persistent storage** via AsyncStorage — notes survive a full app restart
 - **Light / dark mode** — follows the system setting
 - **Delete confirmation** — works on both native and web
 - **Accessible** — labelled buttons and list rows for screen readers
-- **Empty state** — a clear call to action when there are no notes
+- **Empty states** — clear calls to action for no notes, and for no search results
 
 ---
 
@@ -103,11 +112,12 @@ src/
 │   ├── use-theme.ts          # Resolves the active colour set
 │   └── use-color-scheme.ts   # System colour scheme
 ├── lib/
-│   ├── storage.ts            # AsyncStorage read/write
+│   ├── storage.ts            # AsyncStorage read/write + shape migration
+│   ├── notes-query.ts        # search / tag filter / sort (pure functions)
 │   ├── format.ts             # Relative date formatting
 │   └── confirm.ts            # Cross-platform confirm dialog
 └── types/
-    └── note.ts               # Note type, factories, guards
+    └── note.ts               # Note type, factories, tag parsing, normaliser
 ```
 
 ### Architecture notes
@@ -118,8 +128,16 @@ src/
   local state, so initial values are captured once and the draft is local from then on.
 - **Saves are debounced but flushed on exit.** A 400 ms debounce avoids hammering AsyncStorage while
   typing; an unmount effect guarantees pending edits are written before leaving.
-- **Stored data is validated on read.** `isNote()` filters out anything that doesn't match the shape,
-  so a corrupted or hand-edited cache can't crash the list.
+- **Pinning does not touch `updatedAt`.** Pinning is not an edit, and bumping the timestamp would make
+  a pinned note claim it was "just edited" and reorder the list unexpectedly.
+- **Queries are pure functions.** `notes-query.ts` holds the search, filter and sort rules, so the
+  behaviour is stated in one place and testable without rendering anything.
+- **Stored data is normalised on read.** `normalizeNote()` back-fills fields added after the first
+  release (`tags`, `pinned`) and drops unusable entries. Adding those fields did **not** require a
+  storage-key bump, so existing notes were never lost.
+- **Interactive elements are siblings, not nested.** Putting the pin button inside the tappable row
+  rendered `<button>` inside `<button>` on web — invalid HTML that breaks hydration. The row and its
+  pin rail are now siblings.
 
 ---
 
@@ -163,20 +181,27 @@ npx expo-doctor     # diagnose dependency/config issues
 - **Debounced autosave needs an explicit flush.** Relying on the debounce alone loses the final
   keystrokes if the user leaves immediately.
 - **`Alert` doesn't exist on react-native-web.** Platform-specific fallbacks are needed for anything
-  that isn't pure UI.
+  that isn't pure UI. The long-press menu uses a `Modal` instead, because web's `confirm()` only
+  offers two buttons and could never host Pin + Delete + Cancel.
+- **Additive fields don't need a storage-key bump.** `tags` and `pinned` were added without changing
+  the key; a normaliser back-fills defaults on read instead. Bumping the key would have made every
+  existing note vanish, which is far worse than a one-line migration.
+- **Nested pressables are invalid HTML.** A `Pressable` inside a `Pressable` renders nested `<button>`
+  elements on web, breaking hydration and screen readers. Sibling layout avoids it.
 
 ## Known limitations
 
-- No search or filtering
-- No tags, categories, or pinning
+- Tags are free-text with no autocomplete, so typos create separate tags
+- No tag renaming or deletion from a single place
 - No rich text formatting
+- Search is a simple substring match — no fuzzy matching or ranking
 - Storage is unencrypted (fine for non-sensitive notes; SecureStore would be needed otherwise)
 - No sync across devices
 
 ## Possible next steps
 
-- Search and filter
-- Tags and pinning
+- Tag autocomplete and a tag-management screen
+- Bulk selection for multi-delete or multi-tag
 - Move to `expo-sqlite` if the note count grows large
 - Optional Supabase sync for multi-device support
 

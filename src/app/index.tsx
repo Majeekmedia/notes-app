@@ -1,20 +1,57 @@
 import { router } from 'expo-router';
-import { useCallback } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { NoteActionsSheet } from '@/components/note-actions-sheet';
 import { NoteRow } from '@/components/note-row';
+import { SearchBar } from '@/components/search-bar';
+import { TagChip } from '@/components/tag-chip';
 import { ThemedText } from '@/components/themed-text';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useNotes } from '@/hooks/use-notes';
 import { useTheme } from '@/hooks/use-theme';
 import { confirmDestructive } from '@/lib/confirm';
-import type { Note } from '@/types/note';
+import { collectTagCounts, queryNotes, type SortOrder } from '@/lib/notes-query';
+import { noteDisplayTitle, type Note } from '@/types/note';
+
+const SORT_OPTIONS: { key: SortOrder; label: string }[] = [
+  { key: 'updated', label: 'Edited' },
+  { key: 'created', label: 'Created' },
+  { key: 'title', label: 'Title' },
+];
 
 export default function NotesListScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { notes, isLoaded, createNote, deleteNote } = useNotes();
+  const { notes, isLoaded, createNote, deleteNote, togglePin } = useNotes();
+
+  const [search, setSearch] = useState('');
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortOrder>('updated');
+  /** Note whose long-press action menu is open, if any. */
+  const [actionsNote, setActionsNote] = useState<Note | null>(null);
+
+  const visibleNotes = useMemo(
+    () => queryNotes(notes, { search, tag: activeTag, sort }),
+    [notes, search, activeTag, sort],
+  );
+
+  /**
+   * Keeps the open menu in step with the store.
+   *
+   * The sheet holds a Note object, so after a pin/delete the copy it captured
+   * would be stale. Re-reading by id means the menu always reflects reality.
+   */
+  const menuNote = useMemo(
+    () => (actionsNote ? (notes.find((note) => note.id === actionsNote.id) ?? null) : null),
+    [actionsNote, notes],
+  );
+
+  const tagCounts = useMemo(() => collectTagCounts(notes), [notes]);
+
+  /** True when a search or tag filter is narrowing the list. */
+  const isFiltering = search.trim().length > 0 || activeTag !== null;
 
   /**
    * Creates a note, then opens it.
@@ -39,16 +76,72 @@ export default function NotesListScreen() {
     [deleteNote],
   );
 
+  const clearFilters = useCallback(() => {
+    setSearch('');
+    setActiveTag(null);
+  }, []);
+
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.three }]}>
         <ThemedText type="subtitle">Majeek Notes</ThemedText>
         {isLoaded && notes.length > 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
-            {notes.length} {notes.length === 1 ? 'note' : 'notes'}
+            {describeCount(visibleNotes.length, notes.length, isFiltering)}
           </ThemedText>
         ) : null}
       </View>
+
+      {isLoaded && notes.length > 0 ? (
+        <View style={styles.controls}>
+          <SearchBar value={search} onChangeText={setSearch} />
+
+          {tagCounts.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tagRow}
+              keyboardShouldPersistTaps="handled">
+              {tagCounts.map(({ tag, count }) => (
+                <TagChip
+                  key={tag}
+                  label={tag}
+                  count={count}
+                  selected={activeTag === tag}
+                  onPress={() => setActiveTag((current) => (current === tag ? null : tag))}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
+
+          <View style={styles.sortRow}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Sort
+            </ThemedText>
+            {SORT_OPTIONS.map((option) => (
+              <Pressable
+                key={option.key}
+                onPress={() => setSort(option.key)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: sort === option.key }}
+                accessibilityLabel={`Sort by ${option.label}`}
+                hitSlop={Spacing.two}>
+                <ThemedText
+                  type="small"
+                  themeColor={sort === option.key ? 'text' : 'textSecondary'}
+                  style={sort === option.key ? styles.sortActive : undefined}>
+                  {option.label}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* The long-press menu is the only way to reach pin in a list, so say so. */}
+          <ThemedText type="small" themeColor="textSecondary">
+            Tap ☆ to pin · long press a note for more options
+          </ThemedText>
+        </View>
+      ) : null}
 
       {!isLoaded ? (
         <View style={styles.centered}>
@@ -56,21 +149,39 @@ export default function NotesListScreen() {
         </View>
       ) : notes.length === 0 ? (
         <EmptyState />
+      ) : visibleNotes.length === 0 ? (
+        <NoResults onClear={clearFilters} />
       ) : (
         <FlatList
-          data={notes}
+          data={visibleNotes}
           keyExtractor={(note) => note.id}
           contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => (
             <NoteRow
               note={item}
+              highlighted={search.trim().length > 0}
               onPress={() => router.push({ pathname: '/note/[id]', params: { id: item.id } })}
-              onDelete={() => void handleDelete(item)}
+              onLongPress={() => setActionsNote(item)}
+              onTogglePin={() => togglePin(item.id)}
             />
           )}
         />
       )}
+
+      <NoteActionsSheet
+        visible={menuNote !== null}
+        title={menuNote ? noteDisplayTitle(menuNote) : ''}
+        pinned={menuNote?.pinned ?? false}
+        onClose={() => setActionsNote(null)}
+        onTogglePin={() => {
+          if (menuNote) togglePin(menuNote.id);
+        }}
+        onDelete={() => {
+          if (menuNote) void handleDelete(menuNote);
+        }}
+      />
 
       <Pressable
         onPress={handleCreate}
@@ -90,6 +201,11 @@ export default function NotesListScreen() {
   );
 }
 
+function describeCount(visible: number, total: number, isFiltering: boolean): string {
+  if (!isFiltering) return `${total} ${total === 1 ? 'note' : 'notes'}`;
+  return `${visible} of ${total} ${total === 1 ? 'note' : 'notes'}`;
+}
+
 function EmptyState() {
   return (
     <View style={styles.centered}>
@@ -99,6 +215,22 @@ function EmptyState() {
       <ThemedText themeColor="textSecondary" style={styles.centeredText}>
         Tap the ＋ button to write your first note.
       </ThemedText>
+    </View>
+  );
+}
+
+function NoResults({ onClear }: { onClear: () => void }) {
+  return (
+    <View style={styles.centered}>
+      <ThemedText type="subtitle" style={styles.centeredText}>
+        No matching notes
+      </ThemedText>
+      <ThemedText themeColor="textSecondary" style={styles.centeredText}>
+        Try a different search or tag.
+      </ThemedText>
+      <Pressable onPress={onClear} accessibilityRole="button" hitSlop={Spacing.two}>
+        <ThemedText type="link">Clear filters</ThemedText>
+      </Pressable>
     </View>
   );
 }
@@ -114,6 +246,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingBottom: Spacing.three,
     gap: Spacing.half,
+  },
+  controls: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.three,
+    gap: Spacing.two,
+    paddingBottom: Spacing.two,
+  },
+  tagRow: {
+    gap: Spacing.two,
+    paddingVertical: Spacing.half,
+  },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingHorizontal: Spacing.one,
+  },
+  sortActive: {
+    fontWeight: '700',
   },
   centered: {
     flex: 1,

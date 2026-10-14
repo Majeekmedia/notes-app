@@ -36,6 +36,16 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# demo media — kept out of git so the repository stays small.
+# Git retains every version of a file forever, and GitHub blocks files over
+# 100 MiB (warning at 50 MiB). Upload recordings as a Release asset instead.
+docs/*.mp4
+docs/*.mov
+docs/*.webm
+docs/*.gif
+*.mp4
+*.mov
+
 example
 
 # generated native folders
