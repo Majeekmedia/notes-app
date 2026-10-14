@@ -1,4 +1,4 @@
-import { Stack, router } from 'expo-router';
+import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,7 +36,7 @@ export default function NotesListScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.three }]}>
-        <ThemedText type="subtitle">Notes</ThemedText>
+        <ThemedText type="subtitle">Majeek Notes</ThemedText>
         {isLoaded && notes.length > 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
             {notes.length} {notes.length === 1 ? 'note' : 'notes'}

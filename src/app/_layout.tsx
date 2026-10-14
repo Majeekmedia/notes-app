@@ -13,8 +13,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
         <NotesProvider>
-          <Stack>
-            {/* List screen: no header, the screen renders its own title. */}
+          <Stack screenOptions={{ headerBackTitle: 'Notes' }}>
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="note/[id]" options={{ title: 'Note' }} />
           </Stack>

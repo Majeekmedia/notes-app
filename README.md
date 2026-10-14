@@ -1,4 +1,4 @@
-# Notes App
+# Majeek Notes
 
 A minimal, offline-first notes app built with **Expo SDK 57 + Expo Router + TypeScript**.
 
@@ -9,6 +9,35 @@ a full note-taking product.
 <p align="center">
   <em>Screenshots coming once captured on a physical device.</em>
 </p>
+
+---
+
+## Where your notes are stored
+
+**Entirely on your device. There is no server, no cloud, and no network call.** Nothing leaves the
+phone.
+
+| Platform | Where the data lives |
+|---|---|
+| Android | A **SQLite** database named `RKStorage` in the app's private data directory |
+| iOS | A file in the app sandbox (`RCTAsyncLocalStorage_V1`) |
+| Web (preview) | The browser's `localStorage` |
+
+| Event | Do notes survive? |
+|---|---|
+| Closing or backgrounding the app | ✅ Yes |
+| Restarting the phone | ✅ Yes |
+| App update | ✅ Yes |
+| **Uninstalling the app** | ❌ **No — wiped** |
+| Android "Clear data" | ❌ No |
+
+**No cross-device sync.** Device A's notes are invisible on Device B — that requires a backend, which
+this app deliberately does not have. Sync starts at App #4 (Majeek Habits, Supabase-backed).
+
+⚠️ AsyncStorage is **unencrypted** — fine for notes, unsuitable for secrets. A password app would
+need `expo-secure-store`.
+
+See [`docs/CONVENTIONS.md`](../../docs/CONVENTIONS.md) §2 for the full storage model.
 
 ---
 

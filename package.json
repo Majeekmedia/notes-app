@@ -1,9 +1,9 @@
 {
-  "name": "notes-app",
+  "name": "majeek-notes",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "private": true,
-  "description": "Offline-first notes app built with Expo Router and TypeScript",
+  "description": "Majeek Notes — offline-first notes app built with Expo Router and TypeScript",
   "dependencies": {
     "@expo/ui": "~57.0.23",
     "@react-native-async-storage/async-storage": "2.2.0",
